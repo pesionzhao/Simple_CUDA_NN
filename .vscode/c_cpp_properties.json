@@ -1,0 +1,41 @@
+{
+    "configurations": [
+        // {
+        //     "name": "Linux",
+        //     "includePath": [
+        //         "${workspaceFolder}/**",
+        //         "${workspaceFolder}/src/layers",
+        //         "${workspaceFolder}/src/nn_utils/**"
+        //     ],
+        //     "defines": [],
+        //     "compilerPath": "/usr/bin/gcc",
+        //     "cStandard": "c17",
+        //     "cppStandard": "gnu++17",
+        //     "intelliSenseMode": "linux-gcc-x64"
+        // },
+        {
+            "name": "Linux",
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/local/cuda/bin/nvcc",
+            "includePath": [
+                "/usr/local/cuda/include",
+                "/usr/local/cuda-11/include",
+                "/usr/local/cuda-11.8/include",
+                "/usr/include/c++/11",
+                "${workspaceFolder}/src/layers",
+                "${workspaceFolder}/src/nn_utils/**"
+            ],
+            "defines": [
+                "CUDA"
+            ],
+            "browse": {
+                "path": [
+                    "/usr/local/cuda/include"
+                ],
+                "limitSymbolsToIncludedHeaders": true
+            }
+        }
+        
+    ],
+    "version": 4
+}
