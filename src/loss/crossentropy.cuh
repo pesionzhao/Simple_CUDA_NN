@@ -35,7 +35,7 @@ public:
         int grid_size = 1;
         T* res_device = nullptr;
         cudaMalloc((void**)&res_device, sizeof(T));
-        CEforward<T><<<grid_size, block_size>>>(predictions->data_device.get(), target->data_device.get(), res_device, predictions->rows);
+        CEforward<T><<<grid_size, block_size>>>(this->predictions->data_device.get(), target->data_device.get(), res_device, predictions->rows);
         T* res_host = new T;
         cudaMemcpy(res_host, res_device, sizeof(T), cudaMemcpyDeviceToHost);
         cudaFree(res_device);

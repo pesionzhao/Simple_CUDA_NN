@@ -81,7 +81,7 @@ __global__ void backwardKernel(const T* W, const T* A, T* Y, int M, int N, int K
     }
 }
 
-//线性层: y = w@x+b
+//线性层: y = x@W.T + b
 template<typename T>
 class LinearLayer : public NNLayer<T> {
 public:
@@ -91,8 +91,8 @@ public:
     std::shared_ptr<Matrix<T>> A;
 public:
     LinearLayer(int input_size, int output_size){
-        W = std::make_shared<Matrix<T>>(output_size, input_size, this->train);
-        b = std::make_shared<Matrix<T>>(output_size, 1, this->train);
+        W = std::make_shared<Matrix<T>>(input_size, output_size);
+        b = std::make_shared<Matrix<T>>(output_size);
         initWeights();
         initBias();
         this->params = {W, b};
@@ -101,14 +101,14 @@ public:
         if(A->cols!=1)
             throw std::runtime_error("LinearLayer::forward: input matrix must be a column vector");
         this->A = A;
-        Y = std::make_shared<Matrix<T>>(b->rows, 1);
+        Y = std::make_shared<Matrix<T>>(W->shape[1]);
         Y->allocate();
         const int num_per_thread = 1;
         const int block_size_x = 16;
         const int block_size_y = 16;
         int grid_size_x = (Y->cols + block_size_x*num_per_thread - 1) / (block_size_x*num_per_thread);
         int grid_size_y = (Y->rows + block_size_y*num_per_thread - 1) / (block_size_y*num_per_thread);
-        int M = W->rows;
+        int M = A->shape.size()>1?A->shape[0]:1;
         int N = A->cols;
         int K = W->cols;
         if(W->cols!=A->rows){
