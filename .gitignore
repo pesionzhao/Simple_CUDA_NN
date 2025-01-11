@@ -1,0 +1,8 @@
+*
+# Unignore all with extensions
+!*.*
+# Unignore all dirs
+!*/
+*.ipynb
+*.bin
+*.py
