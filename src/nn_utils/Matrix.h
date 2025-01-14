@@ -4,6 +4,7 @@
 #include <iomanip> //保留位数
 #include <iostream>
 #include <curand_kernel.h>//随机初始化
+#include <unordered_set>
 #include "nn_exception.cuh" //异常
 #include "../kernel/kernel.cuh"
 #include "../kernel/base.cuh"
@@ -45,7 +46,6 @@ private:
     bool device_allocated = false;
     bool host_allocated = false;
     bool in_cuda = true;
-    bool requires_grad = true;
     void allocate_device(int N){
         if(!device_allocated){
             T* device_ptr = nullptr; //开辟空间在cudaMalloc实现
@@ -71,9 +71,13 @@ private:
     };
 
 public:
+    bool requires_grad = true;
     std::shared_ptr<T> data_device;
     std::shared_ptr<T> data_host;
     std::shared_ptr<Matrix<T>> grad;
+    std::unordered_set<std::shared_ptr<Matrix<T>>> prev; //前驱节点
+    std::function<void(std::shared_ptr<Matrix<T>>)> grad_fn = [this](std::shared_ptr<Matrix<T>>) { };; //反向传播函数
+    std::string op = "";
     std::vector<int> shape;  // shape.size()==1时为向量， shape.size()>1时为矩阵
     int rows;
     int cols;
@@ -203,35 +207,66 @@ public:
         NNException::throwIfDeviceErrorsOccurred("randomInitKernal failed\n");
         in_cuda = true;
     };
+    //定义反向传播函数指针
+    void setBackward(const std::function<void(std::shared_ptr<Matrix<T>>)>& func) {
+        grad_fn = func;
+    }
     T& operator[](int index) {
         return data_host.get()[index];
     };
-    //重载+矩阵相加
+    //梯度累加
+    void addGrad(std::shared_ptr<Matrix<T>> other_grad){
+        grad = grad+other_grad;
+    }
+    //运算符重载，不计算梯度, 计算梯度的函数在launch.h，智能指针的运算符重载 
+    //Matrix+Matrix
     template<typename U>
     Matrix<T> operator+(const Matrix<U>& other){
+        if(this->shape!=other.shape)
+            throw NNException("+ operator catch the different shape");
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         add<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
-    template<typename U>
-    Matrix<T> operator+(const U scalar){
+    //Matrix+scalar
+    Matrix<T> operator+(const T scalar){
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         addScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     }
+    //一元负号运算符: -Matrix
+    Matrix<T> operator-(){
+        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+        dim3 block_size(16,16);
+        dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
+        opposite<<<grid_size, block_size>>>(data_device.get(), dst->data_device.get(), rows, cols);
+        if(requires_grad){
+            dst->setBackward([this](std::shared_ptr<Matrix<T>> dst) {
+                this->addGrad(-dst->grad);
+            });
+        }
+        return *dst;
+    }
+    //Matrix-Matrix
     template<typename U>
     Matrix<T> operator-(const Matrix<U>& other){
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         minus<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
+        if(requires_grad){
+            dst->setBackward([this,   &other](Matrix<T>* dst) {
+                this->addGrad(dst->grad);
+                const_cast<Matrix<U>&>(other).addGrad(-dst->grad);
+            });
+        }
         return *dst;
     }
-    //重载*标量运算符
+    //Matrix*scalar (broadcast)
     template<typename U>
     Matrix<T> operator*(U scalar) {
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
@@ -240,6 +275,7 @@ public:
         mulScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     };
+    //Matrix*Matrix (element-wise)
     template<typename U>
     Matrix<T> operator*(const Matrix<U>& other) {
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
@@ -248,6 +284,7 @@ public:
         mulElement<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
+    //Matrix/scalar (broadcast)
     template<typename U>
     Matrix<T> operator/(const U scalar){
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
@@ -256,6 +293,7 @@ public:
         divScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     }
+    //Matrix/scalar (element-wise)
     template<typename U>
     Matrix<T> operator/(const Matrix<U>& others){
         std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
@@ -272,13 +310,21 @@ public:
         mulScalarAssgin<<<grid_size, block_size>>>(data_device.get(), scalar, rows, cols);
         return *this;
     };
+    // Matrix<T> T_() {
+    //     std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(cols, rows, requires_grad);
+    //     dim3 block_size(16,16);
+    //     dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
+    //     transpose<<<grid_size, block_size>>>(data_device.get(), dst->data_device.get(), rows, cols);
+    //     return *dst;
+    // };
     Matrix<T> sqrt_() {
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         sqrtElement<<<grid_size, block_size>>>(data_device.get(), rows, cols);
         return *this;
     };
-    //重载右移运算符用于输出
+    //用于调试的函数， functions only for debug
+    //重载右移运算符用于输出 cout << Matrix
     friend std::ostream& operator<<(std::ostream& os, const Matrix<T>& matrix){
         size_t x = matrix.rows;
         size_t y = matrix.cols;
@@ -294,7 +340,7 @@ public:
         }
         os<<std::defaultfloat;
         return os;
-    }
+    };
     //将矩阵数据保存到文件，用于和pytorch比较
     void save_to_file(const std::string& filename) {
         if(in_cuda)
@@ -306,7 +352,7 @@ public:
         }
         fwrite(data_host.get(), sizeof(T), rows * cols, file);
         fclose(file);
-    }
+    };
     //判断两个矩阵是否相等
     void compare(Matrix<T>& other) {
         int flag = 0;
@@ -319,5 +365,5 @@ public:
         if (flag == 0) {
             std::cout << "Matrices match" << std::endl;
         }
-    }
+    };
 };

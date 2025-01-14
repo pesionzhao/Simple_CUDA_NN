@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include "../nn_utils/Matrix.h"
+#include "../nn_utils/launch.h"
 
 template<typename T>
 class NNLayer {

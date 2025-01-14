@@ -101,23 +101,7 @@ public:
         if(A->cols!=1)
             throw std::runtime_error("LinearLayer::forward: input matrix must be a column vector");
         this->A = A;
-        Y = std::make_shared<Matrix<T>>(b->rows, 1);
-        Y->allocate();
-        const int num_per_thread = 1;
-        const int block_size_x = 16;
-        const int block_size_y = 16;
-        int grid_size_x = (Y->cols + block_size_x*num_per_thread - 1) / (block_size_x*num_per_thread);
-        int grid_size_y = (Y->rows + block_size_y*num_per_thread - 1) / (block_size_y*num_per_thread);
-        int M = W->rows;
-        int N = A->cols;
-        int K = W->cols;
-        if(W->cols!=A->rows){
-            std::ostringstream oss;
-            oss << "LinearLayer error: W->cols != A->rows which " 
-                << W->cols << " != " << A->rows;
-            throw std::runtime_error(oss.str()); // 抛出异常并传递格式化后的错误消息
-        }
-        mulKernel_native<T><<<dim3(grid_size_x, grid_size_y), dim3(block_size_x, block_size_y)>>>(W->data_device.get(), A->data_device.get(), b->data_device.get(), Y->data_device.get(), M, N, K);
+        Y = matmul(W, A)+b;
         // GEMMKernel<T, block_size_x><<<dim3(grid_size_x, grid_size_y), dim3(block_size_x, block_size_y)>>>(W.data_device.get(), A.data_device.get(), b.data_device.get(), Y.data_device.get(), M, N, K);
         NNException::throwIfDeviceErrorsOccurred("GEMM error\n");
         return Y;
@@ -156,6 +140,7 @@ public:
     }
     void save_data() {
         W->save_to_file("W.bin");
+        b->save_to_file("b.bin");
     }
 
 };

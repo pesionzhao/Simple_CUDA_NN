@@ -13,8 +13,8 @@ public:
         for (NNLayer<T>* layer : layers) {
             for (std::shared_ptr<Matrix<T>> p : layer->params) {
                 this->parameters.push_back(p);
-                exp_avg.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols));
-                exp_avg_sq.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols));
+                exp_avg.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols, false));
+                exp_avg_sq.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols, false));
             }
         }
 
@@ -25,7 +25,8 @@ public:
             *exp_avg_sq[i] = *exp_avg_sq[i] * beta2 +  *this->parameters[i]->grad * *this->parameters[i]->grad * (1 - beta2);
             Matrix<double> exp_avg_hat = *exp_avg[i] /  (1- pow(beta1, t+1));
             Matrix<double> exp_avg_sq_hat = *exp_avg_sq[i] /  (1- pow(beta2, t+1));
-            *this->parameters[i] = *this->parameters[i] + (exp_avg_hat * (-this->lr) / (exp_avg_sq_hat.sqrt_() + eps));
+            Matrix<double> update = exp_avg_hat * (-this->lr) / (exp_avg_sq_hat.sqrt_() + eps);
+            *this->parameters[i] = *this->parameters[i] + update;
         }
         t++;
         // for (auto* p : model.parameters()) {

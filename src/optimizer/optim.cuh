@@ -4,6 +4,7 @@
 template<typename T>
 class Optimizer {
 public:
+    //只存可学习参数，也就是model的layer
     std::vector<std::shared_ptr<Matrix<T>>> parameters;
     float lr;
     virtual void step() = 0;

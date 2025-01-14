@@ -74,13 +74,13 @@ public:
         T* res_host = new T;
         cudaMemcpy(res_host, res_device, sizeof(T), cudaMemcpyDeviceToHost);
         cudaFree(res_device);
-        std::cout<<"mse: "<<*res_host/(M*N)<<"  ";
+        std::cout<<"mse: "<<*res_host/(M*N)<<"  "<<std::endl;
         return *res_host;
     };
     std::shared_ptr<Matrix<T>> dCost() override{
         int rows = this->predictions->rows;
         int cols = this->predictions->cols;
-        std::shared_ptr<Matrix<T>> dY = std::make_shared<Matrix<T>>(rows, cols);
+        std::shared_ptr<Matrix<T>> dY = std::make_shared<Matrix<T>>(rows, cols, false);
         dim3 block_size(32, 32);
         dim3 gird_size((cols + block_size.x - 1)/block_size.x, (rows + block_size.y - 1)/block_size.y);
         mseBackward<<<gird_size, block_size>>>(this->predictions->data_device.get(), this->target->data_device.get(), dY->data_device.get(), rows, cols);

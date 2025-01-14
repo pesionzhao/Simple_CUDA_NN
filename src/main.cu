@@ -36,7 +36,7 @@ int main(){
     /*================end================*/
     
     Loss<float>* mse = new MSE<float>();
-    Network<float> net(mse);
+    Network<float> net;
     net.addLayer(new LinearLayer<float>(1024, 128));
     net.addLayer(new LinearLayer<float>(128, 128));
     // net.addLayer(new LinearLayer<float>(128, 128));
@@ -46,10 +46,13 @@ int main(){
     Optimizer<float>* optim = new Adam<float>(net.layers, 0.001);
     for(int i = 0; i<10; i++)
     {
-        std::cout<<"epoch "<<i<<std::endl;
+        std::cout<<"epoch "<<i<<"  ";
         Y = net.forward(m);
-        net.backward(Y, label); //计算梯度
+        mse->cost(Y, label);
+        mse->backwardPass();
+        // net.backward(Y, label); //计算梯度
         optim->step();//更新权重
+        optim->zero_grad();
 
     }
 }
