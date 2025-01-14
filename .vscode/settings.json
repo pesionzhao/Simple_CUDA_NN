@@ -66,7 +66,9 @@
         "__split_buffer": "cpp",
         "__tree": "cpp",
         "__memory": "cpp",
-        "queue": "cpp"
+        "queue": "cpp",
+        "locale": "cpp",
+        "unordered_set": "cpp"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }
