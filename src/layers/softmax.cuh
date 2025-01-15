@@ -4,7 +4,7 @@
 
 //假设src是一维向量, 公式推导见博客
 template<typename T>
-__global__ void softmaxBackward(T* src, T* dst, int N){
+__global__ void softmaxJac(T* src, T* dst, int N){
     int col = blockIdx.x*blockDim.x+threadIdx.x;
     int row = blockIdx.y*blockDim.y+threadIdx.y;
     if(row<N&&col<N){
@@ -13,6 +13,20 @@ __global__ void softmaxBackward(T* src, T* dst, int N){
         T tmp = Si == Sj ? Si: 0;
         dst[row*N+col] = tmp-Si*Sj;
     }
+}
+
+template<typename T>
+std::shared_ptr<Matrix<T>> softmaxBackward(std::shared_ptr<Matrix<T>> softmax_output, std::shared_ptr<Matrix<T>> dy)
+{
+    const int block_x = 16;
+    const int block_y = 16;
+    int grid_x = (dy->cols+block_x-1)/block_x;
+    int grid_y = (dy->rows+block_y-1)/block_y;
+    std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
+    std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols);
+    softmaxJaco<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(softmax_output->data_device.get(), jac->data_device.get(), dy->rows);
+    TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), dy->rows, dy->cols, dy->rows);
+    return dx;
 }
 
 //假设输入为一维列向量
@@ -35,17 +49,24 @@ public:
         dim3 block_size(32, 4);
         int grid_size = (N+block_size.y-1)/block_size.y;
         softmaxKernel<T, cols_per_thread><<<grid_size, block_size>>>(input->data_device.get(), output->data_device.get(), M, N);
+        if(this->train){
+            output->op = "softmax";
+            output->prev.insert(input);
+            output->setBackward([this](std::shared_ptr<Matrix<T>> dy) {
+                this->input->addGrad(softmaxBackward(this->output, dy));
+            });
+        }
         return this->output;
     }
     std::shared_ptr<Matrix<T>> backward(std::shared_ptr<Matrix<T>> dy){
         const int block_x = 16;
         const int block_y = 16;
-        int grid_x = (this->output->cols+block_x-1)/block_x;
-        int grid_y = (this->output->rows+block_y-1)/block_y;
-        std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(input->rows, input->rows); // 输入输出大小一致，所以雅可比shape长宽一致
-        std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(input->rows, input->cols);
-        softmaxBackward<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(output->data_device.get(), jac->data_device.get(), input->rows);
-        TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), input->rows, input->cols, input->rows);
+        int grid_x = (dy->cols+block_x-1)/block_x;
+        int grid_y = (dy->rows+block_y-1)/block_y;
+        std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
+        std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols);
+        softmaxJac<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(output->data_device.get(), jac->data_device.get(), dy->rows);
+        TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), dy->rows, dy->cols, dy->rows);
         return dx;
     }
 };

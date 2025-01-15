@@ -83,7 +83,7 @@ std::shared_ptr<Matrix<T>> operator+(std::shared_ptr<Matrix<T>> src1, std::share
 
 template<typename T>
 std::shared_ptr<Matrix<T>> matmul(std::shared_ptr<Matrix<T>> src1, std::shared_ptr<Matrix<T>> src2) {
-    //this @ others
+    //src1 @ src2
     std::shared_ptr<Matrix<T>> dst = mul_(src1.get(), src2.get());
     bool requires_grad = src1->requires_grad||src2->requires_grad;
     if(requires_grad){
@@ -92,11 +92,9 @@ std::shared_ptr<Matrix<T>> matmul(std::shared_ptr<Matrix<T>> src1, std::shared_p
         dst->prev.insert(src1);
         dst->prev.insert(src2);
         dst->setBackward([src1,  src2](std::shared_ptr<Matrix<T>> dst) {
-            //对this的偏导数为
+            //对src1的偏导数为
             src1->addGrad(mulT_(dst->grad.get(), src2.get()));
-            //对others的偏导数为this
-            //jac = *this
-            // other->addGrad((this->T_).matmul(dst->grad));
+            //对src2的偏导数为src1
             src2->addGrad(Tmul_(src1.get(), dst->grad.get()));
         });
     }
