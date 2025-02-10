@@ -1,6 +1,7 @@
 //similar to  nn.module
 #pragma once
 #include"../layers/linear_layer.cuh"
+#include"../layers/relu_activation.cuh"
 #include"../loss/mse.cuh"
 template<typename T>
 class Network{
@@ -10,10 +11,19 @@ public:
 	std::vector<NNLayer<T>*> layers;
     Network(){
     }
+    Network(int method){
+        layers.push_back(new LinearLayer<T>(28*28, 64));
+        layers.push_back(new Relu<T>());
+        layers.push_back(new LinearLayer<T>(64, 64));
+        layers.push_back(new Relu<T>());
+        layers.push_back(new LinearLayer<T>(64, 10));
+        layers.push_back(new Relu<T>());
+    }
     void addLayer(NNLayer<T>* layer){
         layers.push_back(layer);
     }
     std::shared_ptr<Matrix<T>> forward(std::shared_ptr<Matrix<T>> X){
+        //按照vector遍历
         std::shared_ptr<Matrix<T>> A = X;
         for(auto layer : layers){
             A = layer->forward(A);

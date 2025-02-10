@@ -26,7 +26,7 @@ public:
                     buildTopo(child);
                 }
                 topo.push_back(v);
-                // std::cout<<"push node "<< v->op << std::endl;
+                std::cout<<"push node "<< v->op << std::endl;
             }
         };
 

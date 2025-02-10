@@ -63,9 +63,8 @@ public:
     std::shared_ptr<Matrix<T>> forward(std::shared_ptr<Matrix<T>> input){
         if(input->cols!=1)
             throw std::runtime_error("LinearLayer::forward: input matrix must be a column vector");
-        // this->input = input;
-        // output = matmul(W, input)+b;
         this->input = input;
+        // output = matmul(W, input)+b;
         output = std::make_shared<Matrix<T>>(b->rows, 1);
         output->allocate();
         const int num_per_thread = 1;

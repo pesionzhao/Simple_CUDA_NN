@@ -24,7 +24,7 @@ std::shared_ptr<Matrix<T>> softmaxBackward(std::shared_ptr<Matrix<T>> softmax_ou
     int grid_y = (dy->rows+block_y-1)/block_y;
     std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
     std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols);
-    softmaxJaco<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(softmax_output->data_device.get(), jac->data_device.get(), dy->rows);
+    softmaxJac<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(softmax_output->data_device.get(), jac->data_device.get(), dy->rows);
     TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), dy->rows, dy->cols, dy->rows);
     return dx;
 }

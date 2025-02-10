@@ -2,13 +2,14 @@
 #include "loss/mse.cuh"
 #include "loss/crossentropy.cuh"
 #include "layers/linear_layer.cuh"
-#include "layers/softmax.cuh"
+#include "layers/relu_activation.cuh"
+// #include "layers/softmax.cuh"
 #include "optimizer/sgd.cuh"
 #include "optimizer/adam.cuh"
 #include "module/module.cuh"
 int main(){
-    std::shared_ptr<Matrix<float>> m = std::make_shared<Matrix<float>>(1024,1);
-    std::shared_ptr<Matrix<float>> label = std::make_shared<Matrix<float>>(128,1);
+    std::shared_ptr<Matrix<float>> m = std::make_shared<Matrix<float>>(28*28,1);
+    std::shared_ptr<Matrix<float>> label = std::make_shared<Matrix<float>>(10,1);
     std::cout<< "Matrix (" << m->rows << ", " << m->cols << "):" << std::endl;
 
     /*================自定义初始化================*/
@@ -24,7 +25,9 @@ int main(){
     /*================end================*/
 
     m->randomInitDevice(31);
-    label->randomInitDevice(12);
+    label->zeroInitHost();
+    label->data_host.get()[4] = 1;
+    label->copyHostToDevice();
     std::cout<<"init done"<<std::endl;
     // std::cout<<*m<<std::endl;
     /*================测试CE================*/
@@ -35,10 +38,11 @@ int main(){
     // std::cout<<(*dL)[0]<<std::endl;
     /*================end================*/
     
-    Loss<float>* mse = new MSE<float>();
-    Network<float> net;
-    net.addLayer(new LinearLayer<float>(1024, 128));
-    net.addLayer(new LinearLayer<float>(128, 128));
+    Loss<float>* mse = new CE<float>();
+    Network<float> net(0);
+    // net.addLayer(new LinearLayer<float>(1024, 10));
+    // net.addLayer(new Relu<float>());
+    // net.addLayer(new LinearLayer<float>(128, 128));
     // net.addLayer(new LinearLayer<float>(128, 128));
 
     std::shared_ptr<Matrix<float>> Y = std::make_shared<Matrix<float>>();

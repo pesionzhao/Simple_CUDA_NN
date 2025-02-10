@@ -244,11 +244,6 @@ public:
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         opposite<<<grid_size, block_size>>>(data_device.get(), dst->data_device.get(), rows, cols);
-        if(requires_grad){
-            dst->setBackward([this](std::shared_ptr<Matrix<T>> dst) {
-                this->addGrad(-dst->grad);
-            });
-        }
         return *dst;
     }
     //Matrix-Matrix
@@ -258,12 +253,6 @@ public:
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         minus<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
-        if(requires_grad){
-            dst->setBackward([this,   &other](Matrix<T>* dst) {
-                this->addGrad(dst->grad);
-                const_cast<Matrix<U>&>(other).addGrad(-dst->grad);
-            });
-        }
         return *dst;
     }
     //Matrix*scalar (broadcast)
