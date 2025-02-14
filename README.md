@@ -1,4 +1,4 @@
-CUDANN
+# CUDA_NN
 
 本项目旨在实现cuda完成基本的网络训练流程，以达到熟悉cuda/c++编程的目标，
 
@@ -80,11 +80,11 @@ pytorch的线性层为什么不是`y=W*x+b` 而是 `y = x*W^T+b`?
 
 forward:
 
-$y_i = \frac{e^{x_i}}{\sum_{j=1}^{n} e^{x_j}}$
+$$y_i = \frac{e^{x_i}}{\sum_{j=1}^{n} e^{x_j}}$$
 
 backward:
 
-$\frac{\partial y_i}{\partial x_j}=\left\{ \begin{aligned} &=y_i-y_iy_i ,当i=j\\ &= 0-y_i\cdot y_j ， 当 i \ne j \\ \end{aligned} \right.$
+$$\frac{\partial y_i}{\partial x_j}=\left\{ \begin{aligned} &=y_i-y_iy_i ,当i=j\\ &= 0-y_i\cdot y_j ， 当 i \ne j \\ \end{aligned} \right.$$
 
 ### loss
 
@@ -95,26 +95,26 @@ L = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2
 $$
 
 其中：
-- \( y_i \) 是真实值
-- \( \hat{y}_i \) 是预测值
-- \( n \) 是数据点的数量
+- $ y_i $ 是真实值
+- $ \hat{y}_i $ 是预测值
+- $ n $ 是数据点的数量
 
-对 \( \hat{y}_i \) 进行求导：
+对 $ \hat{y}_i $ 进行求导：
 
 $$
 \frac{\partial L}{\partial \hat{y}_i} = \frac{2}{n} (\hat{y}_i - y_i)
 $$
 #### CrossEntropy
 
-多类分类问题，对于一个单一样本的交叉熵损失函数，假设真实标签是 \( y \)（是一个 one-hot 编码的向量），模型输出的概率分布是 \( \hat{y} \)，交叉熵定义为：
+多类分类问题，对于一个单一样本的交叉熵损失函数，假设真实标签是 $y$（是一个 one-hot 编码的向量），模型输出的概率分布是 $\hat{y}$，交叉熵定义为：
 
 $$L = -\sum_{i=1}^{n}y_i\ln(\hat y_i)$$
 
-对于多类交叉熵损失函数，对预测概率 \( \hat{y}_i \) 求导数：
+对于多类交叉熵损失函数，对预测概率 $\hat{y}_i$ 求导数：
 
-\[
+$$
 \frac{L(y, \hat{y})}{\partial \hat{y}_i} = - \frac{y_i}{\hat{y}_i}
-\]
+$$
 
 ### optimizer
 
