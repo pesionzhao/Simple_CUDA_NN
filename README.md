@@ -84,7 +84,9 @@ $$y_i = \frac{e^{x_i}}{\sum_{j=1}^{n} e^{x_j}}$$
 
 backward:
 
-$$\frac{\partial y_i}{\partial x_j}=\left\{ \begin{aligned} &=y_i-y_iy_i ,当i=j\\ &= 0-y_i\cdot y_j ， 当 i \ne j \\ \end{aligned} \right.$$
+$$
+\frac{\partial y_i}{\partial x_j} = \left \{ \begin{aligned} &=y_i-y_iy_i ,当i=j\\ &= 0-y_i\cdot y_j ， 当 i \ne j \\ \end{aligned} \right.
+$$
 
 ### loss
 
