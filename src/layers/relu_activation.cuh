@@ -22,26 +22,25 @@ __global__ void reluBackwardKernel(T* relu_output, T* dy, T* dx, int M, int N){
 
 // 只有大于零的值才有梯度
 template<typename T>
-std::shared_ptr<Matrix<T>> reluBackward(std::shared_ptr<Matrix<T>> relu_output, std::shared_ptr<Matrix<T>> dy){
+std::shared_ptr<Tensor<T>> reluBackward(std::shared_ptr<Tensor<T>> relu_output, std::shared_ptr<Tensor<T>> dy){
     int M = dy->rows;
     int N = dy->cols;
     const int block_x = 16;
     const int block_y = 16;
     int grid_x = (dy->cols+block_x-1)/block_x;
     int grid_y = (dy->rows+block_y-1)/block_y;
-    std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols, false);
+    std::shared_ptr<Tensor<T>> dx = std::make_shared<Tensor<T>>(dy->rows, dy->cols, false);
     reluBackwardKernel<<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(relu_output->data_device.get(), dy->data_device.get(), dx->data_device.get(), M, N);
     return dx;
 }
 template<typename T>
 class Relu: public NNLayer<T>{
-    // std::shared_ptr<Matrix<T>> input;
-    std::shared_ptr<Matrix<T>> output;
+    std::shared_ptr<Tensor<T>> output;
     //y = max(0, x);
-    std::shared_ptr<Matrix<T>> forward(std::shared_ptr<Matrix<T>> input){
+    std::shared_ptr<Tensor<T>> forward(std::shared_ptr<Tensor<T>> input){
         int M = input->rows;
         int N = input->cols;
-        std::shared_ptr<Matrix<T>> output = std::make_shared<Matrix<T>>(M, N, input->requires_grad);
+        std::shared_ptr<Tensor<T>> output = std::make_shared<Tensor<T>>(M, N, input->requires_grad);
         dim3 block_size(16,16);
         int grid_size_x = (input->cols + block_size.x - 1) / (block_size.x);
         int grid_size_y = (input->rows + block_size.y - 1) / (block_size.y);
@@ -49,13 +48,10 @@ class Relu: public NNLayer<T>{
         if(this->train){
             output->op = "relu";
             output->prev.insert(input);
-            output->setBackward([input](std::shared_ptr<Matrix<T>> dst){
+            output->setBackward([input](std::shared_ptr<Tensor<T>> dst){
                 input->addGrad(reluBackward(dst, dst->grad));
             });
         }
         return output;
-    }
-	std::shared_ptr<Matrix<T>> backward(std::shared_ptr<Matrix<T>> dy){
-        return nullptr;
     }
 };

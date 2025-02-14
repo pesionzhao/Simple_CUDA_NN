@@ -9,13 +9,13 @@ public:
     SGD(std::vector<NNLayer<T>*> layers, float lr){
         this->lr = lr;
         for (NNLayer<T>* layer : layers) {
-            for (std::shared_ptr<Matrix<T>> p : layer->params) {
+            for (std::shared_ptr<Tensor<T>> p : layer->params) {
                 this->parameters.push_back(p);
             }
         }
     }
     void step() override{
-        for (std::shared_ptr<Matrix<T>> p : this->parameters) {
+        for (std::shared_ptr<Tensor<T>> p : this->parameters) {
             if (p->grad != nullptr) {
                 dim3 block_size(32,32);
                 dim3 grid_size((p->cols + block_size.x - 1)/ block_size.x, (p->rows + block_size.y - 1)/ block_size.y);
@@ -24,7 +24,7 @@ public:
         }
     }
     void zero_grad() override{
-        for (std::shared_ptr<Matrix<T>> p : this->parameters) {
+        for (std::shared_ptr<Tensor<T>> p : this->parameters) {
             if (p->grad != nullptr) {
                 p->grad->zeroInitDevice();
             }

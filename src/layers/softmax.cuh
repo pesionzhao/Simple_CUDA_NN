@@ -2,6 +2,8 @@
 
 #include"nn_layer.h"
 
+//目前softmax的backward只支持一维向量，TODO多维
+
 //假设src是一维向量, 公式推导见博客
 template<typename T>
 __global__ void softmaxJac(T* src, T* dst, int N){
@@ -16,14 +18,14 @@ __global__ void softmaxJac(T* src, T* dst, int N){
 }
 
 template<typename T>
-std::shared_ptr<Matrix<T>> softmaxBackward(std::shared_ptr<Matrix<T>> softmax_output, std::shared_ptr<Matrix<T>> dy)
+std::shared_ptr<Tensor<T>> softmaxBackward(std::shared_ptr<Tensor<T>> softmax_output, std::shared_ptr<Tensor<T>> dy)
 {
     const int block_x = 16;
     const int block_y = 16;
     int grid_x = (dy->cols+block_x-1)/block_x;
     int grid_y = (dy->rows+block_y-1)/block_y;
-    std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
-    std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols);
+    std::shared_ptr<Tensor<T>> jac = std::make_shared<Tensor<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
+    std::shared_ptr<Tensor<T>> dx = std::make_shared<Tensor<T>>(dy->rows, dy->cols);
     softmaxJac<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(softmax_output->data_device.get(), jac->data_device.get(), dy->rows);
     TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), dy->rows, dy->cols, dy->rows);
     return dx;
@@ -33,40 +35,30 @@ std::shared_ptr<Matrix<T>> softmaxBackward(std::shared_ptr<Matrix<T>> softmax_ou
 template<typename T>
 class Softmax: public NNLayer<T>{
 public:
-    std::shared_ptr<Matrix<T>> input; //shape(rows, 1)
-    std::shared_ptr<Matrix<T>> output; //shape(rows, 1)
+    std::shared_ptr<Tensor<T>> input;  //shape(bs, features)
+    std::shared_ptr<Tensor<T>> output; //shape(bs, features)
     Softmax(){}
-    std::shared_ptr<Matrix<T>> forward(std::shared_ptr<Matrix<T>> input) override{
-        if(input->cols!=1) //只能适用于一维列向量
-            throw NNException("Currently Softmax layer is only suitable for one-dimensional vector");
-        int N = input->rows;
-        int M = input->cols;
+    std::shared_ptr<Tensor<T>> forward(std::shared_ptr<Tensor<T>> input) override{
+        // if(input->cols!=1) //只能适用于一维列向量
+        //     throw NNException("Currently Softmax layer is only suitable for one-dimensional vector");
+        int N = input->cols;
+        int M = input->rows;
+        //TODO cols_per_thread的设定
         const int cols_per_thread = 1;
         if(cols_per_thread*32<N)
             throw NNException("Softmax cols_per_thread need be set larger");
         this->input = input;
-        this->output = std::make_shared<Matrix<T>>(N, M);
+        this->output = std::make_shared<Tensor<T>>(M, N);
         dim3 block_size(32, 4);
         int grid_size = (N+block_size.y-1)/block_size.y;
         softmaxKernel<T, cols_per_thread><<<grid_size, block_size>>>(input->data_device.get(), output->data_device.get(), M, N);
         if(this->train){
             output->op = "softmax";
             output->prev.insert(input);
-            output->setBackward([this](std::shared_ptr<Matrix<T>> dy) {
+            output->setBackward([this](std::shared_ptr<Tensor<T>> dy) {
                 this->input->addGrad(softmaxBackward(this->output, dy));
             });
         }
         return this->output;
-    }
-    std::shared_ptr<Matrix<T>> backward(std::shared_ptr<Matrix<T>> dy){
-        const int block_x = 16;
-        const int block_y = 16;
-        int grid_x = (dy->cols+block_x-1)/block_x;
-        int grid_y = (dy->rows+block_y-1)/block_y;
-        std::shared_ptr<Matrix<T>> jac = std::make_shared<Matrix<T>>(dy->rows, dy->rows); // 输入输出大小一致，所以雅可比shape长宽一致
-        std::shared_ptr<Matrix<T>> dx = std::make_shared<Matrix<T>>(dy->rows, dy->cols);
-        softmaxJac<T><<<dim3(grid_y, grid_y), dim3(block_x, block_y)>>>(output->data_device.get(), jac->data_device.get(), dy->rows);
-        TmulKernel<T, block_x, 1><<<dim3(grid_x, grid_y), dim3(block_x, block_y)>>>(jac->data_device.get(), dy->data_device.get(), dx->data_device.get(), dy->rows, dy->cols, dy->rows);
-        return dx;
     }
 };

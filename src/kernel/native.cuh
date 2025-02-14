@@ -1,3 +1,4 @@
+//朴素的kernel, 用于首先跑通结果，后续再进行优化
 template<typename T>
 __global__ void mulTKernel_native(const T* W, const T* A, T* Y, int M, int N, int K) {
     int row = blockDim.y*blockIdx.y+threadIdx.y;
@@ -26,10 +27,4 @@ __global__ void TmulKernel_native(const T* W, const T* A, T* Y, int M, int N, in
         }
         Y[row*N+col] = sum;
     }
-}
-
-template<typename T>
-__global__ void softmax_native(const T* src, T* dst, int M, int N) {
-    
-
 }

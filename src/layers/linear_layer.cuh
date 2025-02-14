@@ -48,24 +48,32 @@ __global__ void GEMMKernel(const T* W, const T* A, const T* b, T* Y, int M, int 
 template<typename T>
 class LinearLayer : public NNLayer<T> {
 public:
-    std::shared_ptr<Matrix<T>> W;
-    std::shared_ptr<Matrix<T>> b;
-    std::shared_ptr<Matrix<T>> output;
-    std::shared_ptr<Matrix<T>> input;
+    std::shared_ptr<Tensor<T>> W;
+    std::shared_ptr<Tensor<T>> b;
+    std::shared_ptr<Tensor<T>> output;
+    std::shared_ptr<Tensor<T>> input;
+    int input_feature;
+    int output_feature;
 public:
     LinearLayer(int input_size, int output_size){
-        W = std::make_shared<Matrix<T>>(output_size, input_size, this->train);
-        b = std::make_shared<Matrix<T>>(output_size, 1, this->train);
-        initWeights();
-        initBias();
+        this->input_feature = input_size;
+        this->output_feature = output_size;
+        this->name = "Linear";
+        W = std::make_shared<Tensor<T>>(output_size, input_size, this->train);
+        b = std::make_shared<Tensor<T>>(output_size, 1, this->train);
+        // if(state==nullptr)
+        //     unsigned long long seed = std::chrono::system_clock::now().time_since_epoch().count(); 
+        //     initWeights(seed);
+        //     initBias();
+        init();
         this->params = {W, b};
     }
-    std::shared_ptr<Matrix<T>> forward(std::shared_ptr<Matrix<T>> input){
+    std::shared_ptr<Tensor<T>> forward(std::shared_ptr<Tensor<T>> input){
         if(input->cols!=1)
-            throw std::runtime_error("LinearLayer::forward: input matrix must be a column vector");
+            throw std::runtime_error("LinearLayer::forward: input Tensor must be a column vector");
         this->input = input;
         // output = matmul(W, input)+b;
-        output = std::make_shared<Matrix<T>>(b->rows, 1);
+        output = std::make_shared<Tensor<T>>(b->rows, 1);
         output->allocate();
         const int num_per_thread = 1;
         const int block_size_x = 16;
@@ -89,7 +97,7 @@ public:
             output->prev.insert(input);
             output->prev.insert(W);
             output->prev.insert(b);
-            output->setBackward([this](std::shared_ptr<Matrix<T>> output) {
+            output->setBackward([this](std::shared_ptr<Tensor<T>> output) {
                 this->input->addGrad(Tmul_(this->W.get(), output->grad.get()));
                 this->W->addGrad(mulT_(output->grad.get(), this->input.get()));
                 this->b->addGrad(output->grad);
@@ -99,7 +107,7 @@ public:
 
     }
     //链式法则求梯度，dz为后一层的梯度，逐步链到第一层, dY = dL / dY
-    std::shared_ptr<Matrix<T>> backward(std::shared_ptr<Matrix<T>> dY){
+    std::shared_ptr<Tensor<T>> backward(std::shared_ptr<Tensor<T>> dY){
         if(!this->train)
             throw NNException("Linear layer is not in training mode");
         const int num_per_thread = 4;
@@ -124,10 +132,32 @@ public:
     void initWeights(unsigned long long seed=0){
         // W.randomInitDevice(seed);
         W->init_Xavier(seed);
+        // W->randomInitDevice(seed);
         // W*=0.01;
     }
     void initBias(){
+        // b->init_Xavier(89212);
         b->zeroInitDevice();
+    }
+    void init(){
+        float bound = 1/sqrt(this->input_feature);
+        uniform_(W->data_host.get(), this->output_feature*this->input_feature, -bound, bound, &rng);
+        // for(int i = 0; i<this->input_feature; i++){
+        //     std::cout<<W->data_host.get()[i] << " ";
+        // }
+        // std::cout<<std::endl;
+        uniform_(b->data_host.get(), this->output_feature, -bound, bound, &rng);
+        // for(int i = 0; i<this->output_feature; i++){
+        //     std::cout<<b->data_host.get()[i] << " ";
+        // }
+        // std::cout<<std::endl;
+        W->copyHostToDevice();
+        b->copyHostToDevice();
+        //初始化w
+        // for (int i = 0; i < this->output_feature; i++) {
+        //     for(int j = 0; j< this->input_feature; j++){
+        //         W->data_host.get()[i*this->input_feature+j] = 
+        //     }
     }
     void save_data() {
         W->save_to_file("W.bin");

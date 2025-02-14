@@ -8,6 +8,11 @@
 #include "nn_exception.cuh" //异常
 #include "../kernel/kernel.cuh"
 #include "../kernel/base.cuh"
+#include "rand.h"
+
+extern mt19937_state rng;
+mt19937_state rng;
+
 enum InitType
 {
     ZERO,
@@ -24,7 +29,7 @@ __global__ void randomInitKernal(T* data, int rows, int cols, unsigned long long
     curand_init(seed, index, 0, &state);
     if (idx_x<cols&&idx_y<rows) {
         // 均匀分布
-        // data[idx_y*cols+idx_x] = static_cast<T>(curand_uniform_double(&state));
+        // data[idx_y*cols+idx_x] = static_cast<T>(curand_uniform_double(&state))/cols;
         // 高斯分布
         data[idx_y*cols+idx_x] = static_cast<T>(curand_normal_double(&state));
     }
@@ -41,7 +46,7 @@ __global__ void zeroInitKernal(T* data, int rows, int cols)
 }
 
 template<typename T>
-class Matrix {
+class Tensor {
 private:
     bool device_allocated = false;
     bool host_allocated = false;
@@ -56,7 +61,7 @@ private:
             device_allocated = true;
             //TODO cuda or cpu
             if(requires_grad){
-                grad = std::make_shared<Matrix<T>>(shape, false);
+                grad = std::make_shared<Tensor<T>>(shape, false);
                 grad->allocate_device(N);
                 grad->zeroInitDevice();
             }
@@ -74,34 +79,36 @@ public:
     bool requires_grad = true;
     std::shared_ptr<T> data_device;
     std::shared_ptr<T> data_host;
-    std::shared_ptr<Matrix<T>> grad;
-    std::unordered_set<std::shared_ptr<Matrix<T>>> prev; //前驱节点
-    std::function<void(std::shared_ptr<Matrix<T>>)> grad_fn = [this](std::shared_ptr<Matrix<T>>) { };; //反向传播函数
+    std::shared_ptr<Tensor<T>> grad;
+    std::unordered_set<std::shared_ptr<Tensor<T>>> prev; //前驱节点
+    std::function<void(std::shared_ptr<Tensor<T>>)> grad_fn = [this](std::shared_ptr<Tensor<T>>) { };; //反向传播函数
     std::string op = "";
     std::vector<int> shape;  // shape.size()==1时为向量， shape.size()>1时为矩阵
     int rows;
     int cols;
-    Matrix(){};
-    Matrix(int len){
+    Tensor(){};
+    Tensor(int len){
         shape = {len};         
         rows = shape[0];
         cols = 1;
         allocate();
     };
-    Matrix(std::vector<int>& shape, bool requires_grad = true) : requires_grad(requires_grad){
+    Tensor(std::vector<int>& shape, bool requires_grad = true) : requires_grad(requires_grad){
         this->shape=shape;
         rows = shape[0];
         cols = shape[1];
         allocate();
     };
-    Matrix(std::vector<int>&& shape, bool requires_grad = true) : requires_grad(requires_grad){
+    Tensor(std::vector<int>&& shape, bool requires_grad = true) : requires_grad(requires_grad){
         this->shape=std::move(shape);
         rows = shape[0];
         cols = shape[1];
         allocate();
     };
-    Matrix(int rows, int cols) : rows(rows), cols(cols){shape = {rows, cols}; allocate();};
-    Matrix(int rows, int cols, InitType init) : rows(rows), cols(cols){
+    //默认行向量
+    Tensor(int featrues, bool requires_grad=true) : cols(featrues), requires_grad(requires_grad){shape = {1, cols}; allocate();};
+    Tensor(int rows, int cols) : rows(rows), cols(cols){shape = {rows, cols}; allocate();};
+    Tensor(int rows, int cols, InitType init) : rows(rows), cols(cols){
         shape = {rows, cols}; 
         allocate();
         switch (init){
@@ -117,10 +124,10 @@ public:
             break;
         }
     };
-    Matrix(int rows, int cols, bool requires_grad) : rows(rows), cols(cols), requires_grad(requires_grad){shape = {rows, cols};allocate();};
+    Tensor(int rows, int cols, bool requires_grad) : rows(rows), cols(cols), requires_grad(requires_grad){shape = {rows, cols};allocate();};
     //深拷贝
-    Matrix<T> clone(){
-        Matrix<T> copy(rows, cols, requires_grad);
+    Tensor<T> clone(){
+        Tensor<T> copy(rows, cols, requires_grad);
         allocate();
         int block_size = 64;
         int grid_size = (rows*cols+block_size-1)/block_size;
@@ -158,17 +165,23 @@ public:
     };
     //随机初始化data_host
     void randomInitHost(){
+        float bound = 1;
+        uniform_(data_host.get(), this->rows*this->cols, -bound, bound, &rng);
         // 初始化随机数生成器
-        std::random_device rd;
-        std::mt19937 gen(rd());  // 使用随机设备作为种子
-        std::normal_distribution<> dis(0, 1); // 随机生成 1 到 100 之间的整数
+        // std::random_device rd;
+        // std::mt19937 gen(42);  // 使用随机设备作为种子
+        // std::cout<<"cols = " <<cols<< std::endl;
+        // std::cout<<"rows = " <<rows<< std::endl;
+        // T bound = std::sqrt(6.0 / cols);
+        // std::uniform_real_distribution<> dis(-bound, bound);
+        // // std::normal_distribution<> dis(-bound, bound);
 
-        // 填充矩阵
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                data_host.get()[i*cols+j] = (T)dis(gen);  // 使用分布生成随机数
-            }
-        }
+        // // 填充矩阵
+        // for (int i = 0; i < rows; ++i) {
+        //     for (int j = 0; j < cols; ++j) {
+        //         data_host.get()[i*cols+j] = dis(gen);  // 使用分布生成随机数
+        //     }
+        // }
     };
     //全零初始化data_host
     void zeroInitHost(){
@@ -197,6 +210,10 @@ public:
         randomInitKernal<<<dim3(grid_size_x, grid_size_y), dim3(block_size_x, block_size_y)>>>(data_device.get(), rows, cols, seed);
         *this *= (T)(1/sqrt(rows));
     }
+    //均匀分布初始化
+    void init_Uniform(unsigned long long seed = 0){
+
+    }
     // 全零初始化
     void zeroInitDevice(){
         int block_size_x = 16;
@@ -208,84 +225,84 @@ public:
         in_cuda = true;
     };
     //定义反向传播函数指针
-    void setBackward(const std::function<void(std::shared_ptr<Matrix<T>>)>& func) {
+    void setBackward(const std::function<void(std::shared_ptr<Tensor<T>>)>& func) {
         grad_fn = func;
     }
     T& operator[](int index) {
         return data_host.get()[index];
     };
     //梯度累加
-    void addGrad(std::shared_ptr<Matrix<T>> other_grad){
+    void addGrad(std::shared_ptr<Tensor<T>> other_grad){
         grad = grad+other_grad;
     }
     //运算符重载，不计算梯度, 计算梯度的函数在launch.h，智能指针的运算符重载 
-    //Matrix+Matrix
+    //Tensor+Tensor
     template<typename U>
-    Matrix<T> operator+(const Matrix<U>& other){
+    Tensor<T> operator+(const Tensor<U>& other){
         if(this->shape!=other.shape)
             throw NNException("+ operator catch the different shape");
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         add<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //Matrix+scalar
-    Matrix<T> operator+(const T scalar){
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    //Tensor+scalar
+    Tensor<T> operator+(const T scalar){
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         addScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //一元负号运算符: -Matrix
-    Matrix<T> operator-(){
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    //一元负号运算符: -Tensor
+    Tensor<T> operator-(){
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         opposite<<<grid_size, block_size>>>(data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //Matrix-Matrix
+    //Tensor-Tensor
     template<typename U>
-    Matrix<T> operator-(const Matrix<U>& other){
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    Tensor<T> operator-(const Tensor<U>& other){
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         minus<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //Matrix*scalar (broadcast)
+    //Tensor*scalar (broadcast)
     template<typename U>
-    Matrix<T> operator*(U scalar) {
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    Tensor<T> operator*(U scalar) {
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         mulScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     };
-    //Matrix*Matrix (element-wise)
+    //Tensor*Tensor (element-wise)
     template<typename U>
-    Matrix<T> operator*(const Matrix<U>& other) {
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    Tensor<T> operator*(const Tensor<U>& other) {
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         mulElement<<<grid_size, block_size>>>(data_device.get(), other.data_device.get(), dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //Matrix/scalar (broadcast)
+    //Tensor/scalar (broadcast)
     template<typename U>
-    Matrix<T> operator/(const U scalar){
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    Tensor<T> operator/(const U scalar){
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         divScalar<<<grid_size, block_size>>>(data_device.get(), scalar, dst->data_device.get(), rows, cols);
         return *dst;
     }
-    //Matrix/scalar (element-wise)
+    //Tensor/scalar (element-wise)
     template<typename U>
-    Matrix<T> operator/(const Matrix<U>& others){
-        std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(rows, cols, requires_grad);
+    Tensor<T> operator/(const Tensor<U>& others){
+        std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(rows, cols, requires_grad);
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         divElement<<<grid_size, block_size>>>(data_device.get(), others.data_device.get(), dst->data_device.get(), rows, cols);
@@ -293,37 +310,37 @@ public:
     }
     //重载*=运算符，用作标量乘矩阵
     template<typename U>
-    Matrix<T>& operator*=(U scalar) {
+    Tensor<T>& operator*=(U scalar) {
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         mulScalarAssgin<<<grid_size, block_size>>>(data_device.get(), scalar, rows, cols);
         return *this;
     };
-    // Matrix<T> T_() {
-    //     std::shared_ptr<Matrix<T>> dst = std::make_shared<Matrix<T>>(cols, rows, requires_grad);
+    // Tensor<T> T_() {
+    //     std::shared_ptr<Tensor<T>> dst = std::make_shared<Tensor<T>>(cols, rows, requires_grad);
     //     dim3 block_size(16,16);
     //     dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
     //     transpose<<<grid_size, block_size>>>(data_device.get(), dst->data_device.get(), rows, cols);
     //     return *dst;
     // };
-    Matrix<T> sqrt_() {
+    Tensor<T> sqrt_() {
         dim3 block_size(16,16);
         dim3 grid_size((cols + block_size.x - 1)/ block_size.x, (rows + block_size.y - 1)/ block_size.y);
         sqrtElement<<<grid_size, block_size>>>(data_device.get(), rows, cols);
         return *this;
     };
     //用于调试的函数， functions only for debug
-    //重载右移运算符用于输出 cout << Matrix
-    friend std::ostream& operator<<(std::ostream& os, const Matrix<T>& matrix){
-        size_t x = matrix.rows;
-        size_t y = matrix.cols;
-        os << "Matrix (" << x << ", " << y << "):" << std::endl;
+    //重载右移运算符用于输出 cout << Tensor
+    friend std::ostream& operator<<(std::ostream& os, const Tensor<T>& Tensor){
+        size_t x = Tensor.rows;
+        size_t y = Tensor.cols;
+        os << "Tensor (" << x << ", " << y << "):" << std::endl;
         os << std::fixed <<std::scientific<< std::setprecision(2);
         // 打印矩阵内容，假设host已经有数据
         for (size_t i = 0; i < x; ++i) {
 
             for (size_t j = 0; j < y; ++j) {
-                os <<  std::setw(5) << matrix.data_host.get()[i * y + j] << " ";
+                os <<  std::setw(5) << Tensor.data_host.get()[i * y + j] << " ";
             }
             os << std::endl;
         }
@@ -343,7 +360,7 @@ public:
         fclose(file);
     };
     //判断两个矩阵是否相等
-    void compare(Matrix<T>& other) {
+    void compare(Tensor<T>& other) {
         int flag = 0;
         for (int i = 0; i < rows * cols; i++) {
             if (data_host.get()[i] != other.data_host.get()[i]) {

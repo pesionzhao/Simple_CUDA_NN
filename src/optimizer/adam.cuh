@@ -3,18 +3,18 @@
 template<typename T>
 class Adam : public Optimizer<T>{
 private:
-    std::vector<std::shared_ptr<Matrix<double>>> exp_avg;
-    std::vector<std::shared_ptr<Matrix<double>>> exp_avg_sq;
+    std::vector<std::shared_ptr<Tensor<double>>> exp_avg;
+    std::vector<std::shared_ptr<Tensor<double>>> exp_avg_sq;
     double beta1, beta2, eps;
     int t=0;
 public:
     Adam(std::vector<NNLayer<T>*> layers, float lr, double beta1=0.9, double beta2=0.99, double eps=1e-8): beta1(beta1), beta2(beta2), eps(eps){
         this->lr = lr;
         for (NNLayer<T>* layer : layers) {
-            for (std::shared_ptr<Matrix<T>> p : layer->params) {
+            for (std::shared_ptr<Tensor<T>> p : layer->params) {
                 this->parameters.push_back(p);
-                exp_avg.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols, false));
-                exp_avg_sq.push_back(std::make_shared<Matrix<double>>(p->rows, p->cols, false));
+                exp_avg.push_back(std::make_shared<Tensor<double>>(p->rows, p->cols, false));
+                exp_avg_sq.push_back(std::make_shared<Tensor<double>>(p->rows, p->cols, false));
             }
         }
 
@@ -23,9 +23,9 @@ public:
         for(int i = 0; i< this->parameters.size(); i++){
             *exp_avg[i] = *exp_avg[i] * beta1 +  *this->parameters[i]->grad * (1 - beta1);
             *exp_avg_sq[i] = *exp_avg_sq[i] * beta2 +  *this->parameters[i]->grad * *this->parameters[i]->grad * (1 - beta2);
-            Matrix<double> exp_avg_hat = *exp_avg[i] /  (1- pow(beta1, t+1));
-            Matrix<double> exp_avg_sq_hat = *exp_avg_sq[i] /  (1- pow(beta2, t+1));
-            Matrix<double> update = exp_avg_hat * (-this->lr) / (exp_avg_sq_hat.sqrt_() + eps);
+            Tensor<double> exp_avg_hat = *exp_avg[i] /  (1- pow(beta1, t+1));
+            Tensor<double> exp_avg_sq_hat = *exp_avg_sq[i] /  (1- pow(beta2, t+1));
+            Tensor<double> update = exp_avg_hat * (-this->lr) / (exp_avg_sq_hat.sqrt_() + eps);
             *this->parameters[i] = *this->parameters[i] + update;
         }
         t++;
@@ -39,7 +39,7 @@ public:
         // }
     }
     void zero_grad() {
-        for (std::shared_ptr<Matrix<T>> p : this->parameters) {
+        for (std::shared_ptr<Tensor<T>> p : this->parameters) {
             if (p->grad != nullptr) {
                 p->grad->zeroInitDevice();
             }

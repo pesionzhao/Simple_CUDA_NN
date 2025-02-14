@@ -55,7 +55,7 @@ class MSE : public Loss<T>{
 private:
     float _cost;
 public:
-    float cost(std::shared_ptr<Matrix<T>> predictions, std::shared_ptr<Matrix<T>> target) override{
+    float cost(std::shared_ptr<Tensor<T>> predictions, std::shared_ptr<Tensor<T>> target) override{
         this->predictions = predictions;
         this->target = target;
         int M = predictions->rows;
@@ -77,10 +77,10 @@ public:
         std::cout<<"mse: "<<*res_host/(M*N)<<"  "<<std::endl;
         return *res_host;
     };
-    std::shared_ptr<Matrix<T>> dCost() override{
+    std::shared_ptr<Tensor<T>> dCost() override{
         int rows = this->predictions->rows;
         int cols = this->predictions->cols;
-        std::shared_ptr<Matrix<T>> dY = std::make_shared<Matrix<T>>(rows, cols, false);
+        std::shared_ptr<Tensor<T>> dY = std::make_shared<Tensor<T>>(rows, cols, false);
         dim3 block_size(32, 32);
         dim3 gird_size((cols + block_size.x - 1)/block_size.x, (rows + block_size.y - 1)/block_size.y);
         mseBackward<<<gird_size, block_size>>>(this->predictions->data_device.get(), this->target->data_device.get(), dY->data_device.get(), rows, cols);
