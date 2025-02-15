@@ -85,7 +85,10 @@ $$y_i = \frac{e^{x_i}}{\sum_{j=1}^{n} e^{x_j}}$$
 backward:
 
 $$
-\frac{\partial y_i}{\partial x_j} = \left \{ \begin{aligned} &=y_i-y_iy_i ,当i=j\\ &= 0-y_i\cdot y_j ， 当 i \ne j \\ \end{aligned} \right.
+\frac{\partial y_i}{\partial x_j} = 
+\begin{cases} 
+y_i - y_i^2, & \text{当 } i = j \\  
+-y_i \cdot y_j, & \text{当 } i \neq j \end{cases}
 $$
 
 ### loss
@@ -97,15 +100,16 @@ L = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2
 $$
 
 其中：
-- $ y_i $ 是真实值
-- $ \hat{y}_i $ 是预测值
-- $ n $ 是数据点的数量
+- $y_i$ 是真实值
+- $\hat{y}_i$ 是预测值
+- $n$ 是数据点的数量
 
-对 $ \hat{y}_i $ 进行求导：
+对 $\hat{y}_i$ 进行求导：
 
 $$
 \frac{\partial L}{\partial \hat{y}_i} = \frac{2}{n} (\hat{y}_i - y_i)
 $$
+
 #### CrossEntropy
 
 多类分类问题，对于一个单一样本的交叉熵损失函数，假设真实标签是 $y$（是一个 one-hot 编码的向量），模型输出的概率分布是 $\hat{y}$，交叉熵定义为：
@@ -129,7 +133,7 @@ $$
 2. 线性层的定义注意是Y=XW+b, 为了符合编程行优先，对注意各个参数的偏导数计算
 3. 神经网络权重的初始化，正态分布，如果方差过大同样导致梯度爆炸，参考torch的初始化，0均值0.01方差
 4. shared_ptr和函数声明周期一样，函数结束自动释放内存，如果要保存就要在其他地方指向这块内存！
-5. 在adam更新梯度时，同样进行了运算，但不保存梯度！！数量级比较小，所以使用double, 如果权重参数使用float, 故要进行重载运算符
+5. 在adam更新梯度时，同样进行了tensor的运算，但不保存梯度！！计算更新量时中间变量数量级比较小，所以使用double, 权重参数可能会使用float, 故要进行重载运算符
 6. 对于mnist数据集, 如果bs=1，也就是一维一维的进行训练，无法收敛
 
 TODO 
