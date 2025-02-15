@@ -18,12 +18,12 @@ https://github.com/Phoenix8215/BuildCudaNeuralNetworkFromScratch
 
 https://github.com/SmartFlowAI/LLM101n-CN/blob/master/micrograd/micrograd.cpp
 
-## **tensor类的实现**
+### **tensor类的实现**
 仿照pytorch, 首先要定义tensor, 也是网络运算的基本单元
 
 - 初始化： 正态分布，Xavier, 全零初始化
 - 运算符重载以及基本的运算： 矩阵之间的逐元素计算或者矩阵与标量之间的逐元素计算，以及右移运算符重载
-- 梯度的保存
+- 自动微分的实现，记录张量的生成路径、梯度和反向传播函数，用于梯度沿着路径反向传播
 
 目前只实现二维张量, 定义如下（省略版）
 
@@ -31,11 +31,16 @@ https://github.com/SmartFlowAI/LLM101n-CN/blob/master/micrograd/micrograd.cpp
 template<typename T>
 class Tensor{
 public:
+    bool requires_grad;//是否需要计算梯度
     //数据形状
     int rows, cols;
     //数据指针
     std::shared_ptr<T> data_host;
     std::shared_ptr<T> data_device;
+    std::shared_ptr<Tensor<T>> grad; //当前节点的梯度（requires_grad==true时）
+    std::unordered_set<std::shared_ptr<Tensor<T>>> prev; //前驱节点， 也就是当前节点是由哪些节点计算的得到的
+    std::function<void(std::shared_ptr<Tensor<T>>)> grad_fn = [this](std::shared_ptr<Tensor<T>>) { };; //当前节点的反向传播函数，用来更新前驱节点的梯度
+
     Tensor(int rows, int cols):rows(rows), cols(cols){}{};
     //开辟空间
     void allocate(){};
